@@ -1,7 +1,10 @@
 ﻿using Hyperledger.Indy.Utils;
 using System;
 using System.Threading.Tasks;
-using static Hyperledger.Indy.IndyNativeMethods;
+using static Hyperledger.Indy.PoolApi.NativeMethods;
+#if __IOS__
+using ObjCRuntime;
+#endif
 
 namespace Hyperledger.Indy.PoolApi
 {
@@ -14,7 +17,10 @@ namespace Hyperledger.Indy.PoolApi
         /// <summary>
         /// Callback to use when a pool open command has completed.
         /// </summary>
-        private static OpenPoolLedgerResultDelegate _openPoolLedgerCallback = (command_handle, err, pool_handle) =>
+#if __IOS__
+        [MonoPInvokeCallback(typeof(OpenPoolLedgerCompletedDelegate))]
+#endif
+        private static void OpenPoolLedgerCallbackMethod(int command_handle, int err, int pool_handle)
         {
             var taskCompletionSource = PendingCommands.Remove<Pool>(command_handle);
 
@@ -22,10 +28,29 @@ namespace Hyperledger.Indy.PoolApi
                 return;
 
             taskCompletionSource.SetResult(new Pool(pool_handle));
-        };
+        }
+        private static OpenPoolLedgerCompletedDelegate OpenPoolLedgerCallback = OpenPoolLedgerCallbackMethod;
 
         /// <summary>
-        /// Creates a new local pool configuration that can be used later to open a connection to pool nodes.
+        /// Callback to use when list pools command has completed.
+        /// </summary>
+#if __IOS__
+        [MonoPInvokeCallback(typeof(ListPoolsCompletedDelegate))]
+#endif
+        private static void ListPoolsCallbackMethod(int command_handle, int err, string pools)
+        {
+            var taskCompletionSource = PendingCommands.Remove<string>(command_handle);
+
+            if (!CallbackHelper.CheckCallback(taskCompletionSource, err))
+                return;
+
+            taskCompletionSource.SetResult(pools);
+        }
+        private static ListPoolsCompletedDelegate ListPoolsCallback = ListPoolsCallbackMethod;
+
+        /// <summary>
+        /// Creates a new local pool configuration with the specified name that can be used later to open a connection to 
+        /// pool nodes.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -44,7 +69,11 @@ namespace Hyperledger.Indy.PoolApi
         /// <seealso cref="OpenPoolLedgerAsync(string, string)"/>
         /// <seealso cref="DeletePoolLedgerConfigAsync(string)"/>
         /// <param name="configName">The name for the configuration.</param>
-        /// <param name="config">The configuration JSON.</param>
+        /// <param name="config">Pool configuration json. if NULL, then default config will be used. Example:
+        /// {
+        ///     "genesis_txn": string (optional), A path to genesis transaction file. If NULL, then a default one will be used.
+        ///                    If file doesn't exists default one will be created.
+        /// }</param>
         /// <returns>An asynchronous <see cref="Task{T}"/> with no return value that completes when
         /// the configuration is created.</returns>
         public static Task CreatePoolLedgerConfigAsync(string configName, string config)
@@ -54,7 +83,7 @@ namespace Hyperledger.Indy.PoolApi
             var taskCompletionSource = new TaskCompletionSource<bool>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            var result = IndyNativeMethods.indy_create_pool_ledger_config(
+            var result = NativeMethods.indy_create_pool_ledger_config(
                 commandHandle,
                 configName,
                 config,
@@ -80,7 +109,7 @@ namespace Hyperledger.Indy.PoolApi
             var taskCompletionSource = new TaskCompletionSource<bool>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            var result = IndyNativeMethods.indy_delete_pool_ledger_config(
+            var result = NativeMethods.indy_delete_pool_ledger_config(
                 commandHandle,
                 configName,
                 CallbackHelper.TaskCompletingNoValueCallback
@@ -126,11 +155,30 @@ namespace Hyperledger.Indy.PoolApi
             var taskCompletionSource = new TaskCompletionSource<Pool>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            var result = IndyNativeMethods.indy_open_pool_ledger(
+            var result = NativeMethods.indy_open_pool_ledger(
                 commandHandle,
                 configName,
                 config,
-                _openPoolLedgerCallback
+                OpenPoolLedgerCallback
+                );
+
+            CallbackHelper.CheckResult(result);
+
+            return taskCompletionSource.Task;
+        }
+
+        /// <summary>
+        /// Lists names of created pool ledgers
+        /// </summary>
+        /// <returns>The pools json.</returns>
+        public static Task<string> ListPoolsAsync()
+        {
+            var taskCompletionSource = new TaskCompletionSource<string>();
+            var commandHandle = PendingCommands.Add(taskCompletionSource);
+
+            var result = NativeMethods.indy_list_pools(
+                commandHandle,
+                ListPoolsCallback
                 );
 
             CallbackHelper.CheckResult(result);
@@ -146,13 +194,13 @@ namespace Hyperledger.Indy.PoolApi
         /// <summary>
         /// Gets the handle for the pool.
         /// </summary>
-        internal IntPtr Handle { get; }
+        internal int Handle { get; }
 
         /// <summary>
         /// Initializes a new Pool instance with the specified handle.
         /// </summary>
         /// <param name="handle">The handle of the underlying unmanaged pool.</param>
-        private Pool(IntPtr handle)
+        private Pool(int handle)
         {
             Handle = handle;
             _requiresClose = true;
@@ -167,7 +215,7 @@ namespace Hyperledger.Indy.PoolApi
             var taskCompletionSource = new TaskCompletionSource<bool>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            var result = IndyNativeMethods.indy_refresh_pool_ledger(
+            var result = NativeMethods.indy_refresh_pool_ledger(
                 commandHandle,
                 Handle,
                 CallbackHelper.TaskCompletingNoValueCallback
@@ -193,7 +241,7 @@ namespace Hyperledger.Indy.PoolApi
             var taskCompletionSource = new TaskCompletionSource<bool>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            var result = IndyNativeMethods.indy_close_pool_ledger(
+            var result = NativeMethods.indy_close_pool_ledger(
                 commandHandle,
                 Handle,
                 CallbackHelper.TaskCompletingNoValueCallback
@@ -202,6 +250,35 @@ namespace Hyperledger.Indy.PoolApi
             CallbackHelper.CheckResult(result);
 
             GC.SuppressFinalize(this);
+
+            return taskCompletionSource.Task;
+        }
+
+        /// <summary> 
+        /// Set PROTOCOL_VERSION to specific version. 
+        /// 
+        /// There is a global property PROTOCOL_VERSION that used in every request to the pool and 
+        /// specified version of Indy Node which Libindy works. 
+        /// 
+        /// By default PROTOCOL_VERSION=1. 
+        /// </summary> 
+        /// <param name="protocolVersion">Protocol version will be used: 
+        /// <c> 
+        ///     1 - for Indy Node 1.3 
+        ///     2 - for Indy Node 1.4 and greater
+        /// </c></param> 
+        public static Task SetProtocolVersionAsync(int protocolVersion)
+        {
+            var taskCompletionSource = new TaskCompletionSource<bool>();
+            var commandHandle = PendingCommands.Add(taskCompletionSource);
+
+            var result = NativeMethods.indy_set_protocol_version(
+                commandHandle,
+                protocolVersion,
+                CallbackHelper.TaskCompletingNoValueCallback
+                );
+
+            CallbackHelper.CheckResult(result);
 
             return taskCompletionSource.Task;
         }
@@ -222,7 +299,7 @@ namespace Hyperledger.Indy.PoolApi
         {
             if (_requiresClose)
             {
-                IndyNativeMethods.indy_close_pool_ledger(
+                NativeMethods.indy_close_pool_ledger(
                    -1,
                    Handle,
                    CallbackHelper.NoValueCallback

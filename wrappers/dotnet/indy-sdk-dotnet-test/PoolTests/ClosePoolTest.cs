@@ -28,7 +28,7 @@ namespace Hyperledger.Indy.Test.PoolTests
             await pool.CloseAsync();
             openedPools.Remove(pool);
 
-            var ex = await Assert.ThrowsExceptionAsync<PoolClosedException>(() =>
+            var ex = await Assert.ThrowsExceptionAsync<InvalidPoolException>(() =>
                 pool.CloseAsync()
             );
         }
@@ -44,6 +44,20 @@ namespace Hyperledger.Indy.Test.PoolTests
             await pool.CloseAsync();
 
             pool = await Pool.OpenPoolLedgerAsync(poolName, null);
+            openedPools.Add(pool);
+        }
+
+        [TestMethod]
+        public async Task TestAutoCloseWorks()
+        {
+            var poolName = PoolUtils.CreatePoolLedgerConfig();
+
+            using (var autoClosePool = await Pool.OpenPoolLedgerAsync(poolName, null))
+            {
+                Assert.IsNotNull(autoClosePool);
+            }
+
+            var pool = await Pool.OpenPoolLedgerAsync(poolName, null);
             openedPools.Add(pool);
         }
     }

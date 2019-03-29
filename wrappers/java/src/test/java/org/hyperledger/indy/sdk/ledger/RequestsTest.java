@@ -1,16 +1,11 @@
 package org.hyperledger.indy.sdk.ledger;
 
-import org.hyperledger.indy.sdk.ErrorCode;
-import org.hyperledger.indy.sdk.ErrorCodeMatcher;
 import org.hyperledger.indy.sdk.IndyIntegrationTestWithPoolAndSingleWallet;
-import org.hyperledger.indy.sdk.signus.Signus;
-import org.hyperledger.indy.sdk.signus.SignusJSONParameters;
-import org.hyperledger.indy.sdk.signus.SignusResults;
-import org.hyperledger.indy.sdk.wallet.Wallet;
+import org.hyperledger.indy.sdk.did.Did;
+import org.hyperledger.indy.sdk.did.DidJSONParameters;
+import org.hyperledger.indy.sdk.did.DidResults;
 import org.json.JSONObject;
 import org.junit.*;
-
-import java.util.concurrent.ExecutionException;
 
 import static org.junit.Assert.assertNotNull;
 
@@ -24,6 +19,7 @@ public class RequestsTest extends IndyIntegrationTestWithPoolAndSingleWallet {
 				"             \"type\":\"105\",\n" +
 				"             \"dest\":\"Th7MpTaRZVRYnPiabds81Y\"\n" +
 				"          },\n" +
+				"          \"protocolVersion\":2,\n" +
 				"          \"signature\":\"4o86XfkiJ4e2r3J6Ufoi17UU3W5Zi9sshV6FjBjkVw4sgEQFQov9dxqDEtLbAJAWffCWd5KfAk164QVo7mYwKkiV\"}";
 
 		String response = Ledger.submitRequest(pool, request).get();
@@ -40,10 +36,10 @@ public class RequestsTest extends IndyIntegrationTestWithPoolAndSingleWallet {
 
 	@Test
 	public void testSignAndSubmitRequestWorks() throws Exception {
-		SignusResults.CreateAndStoreMyDidResult trusteeDidResult = Signus.createAndStoreMyDid(wallet, TRUSTEE_IDENTITY_JSON).get();
+		DidResults.CreateAndStoreMyDidResult trusteeDidResult = Did.createAndStoreMyDid(wallet, TRUSTEE_IDENTITY_JSON).get();
 		String trusteeDid = trusteeDidResult.getDid();
 
-		SignusResults.CreateAndStoreMyDidResult myDidResult = Signus.createAndStoreMyDid(wallet, "{}").get();
+		DidResults.CreateAndStoreMyDidResult myDidResult = Did.createAndStoreMyDid(wallet, "{}").get();
 		String myDid = myDidResult.getDid();
 
 		String nymRequest = Ledger.buildNymRequest(trusteeDid, myDid, null, null, null).get();
@@ -53,33 +49,14 @@ public class RequestsTest extends IndyIntegrationTestWithPoolAndSingleWallet {
 
 	@Test
 	public void testSignAndSubmitRequestWorksForNotFoundSigner() throws Exception {
-		thrown.expect(ExecutionException.class);
-		thrown.expectCause(new ErrorCodeMatcher(ErrorCode.LedgerInvalidTransaction));
+		DidJSONParameters.CreateAndStoreMyDidJSONParameter signerDidJson =
+				new DidJSONParameters.CreateAndStoreMyDidJSONParameter(null, "00000000000000000000UnknowSigner", null, null);
 
-		SignusJSONParameters.CreateAndStoreMyDidJSONParameter signerDidJson =
-				new SignusJSONParameters.CreateAndStoreMyDidJSONParameter(null, "00000000000000000000UnknowSigner", null, null);
-
-		SignusResults.CreateAndStoreMyDidResult trusteeDidResult = Signus.createAndStoreMyDid(wallet, signerDidJson.toJson()).get();
+		DidResults.CreateAndStoreMyDidResult trusteeDidResult = Did.createAndStoreMyDid(wallet, signerDidJson.toJson()).get();
 		String signerDid = trusteeDidResult.getDid();
 
 		String schemaRequest = Ledger.buildSchemaRequest(signerDid, SCHEMA_DATA).get();
-		Ledger.signAndSubmitRequest(pool, wallet, signerDid, schemaRequest).get();
-	}
-
-	@Test
-	public void testSignAndSubmitRequestWorksForIncompatibleWalletAndPool() throws Exception {
-		thrown.expect(ExecutionException.class);
-		thrown.expectCause(new ErrorCodeMatcher(ErrorCode.WalletIncompatiblePoolError));
-
-		String walletName = "incompatibleWallet";
-
-		Wallet.createWallet("otherPoolName", walletName, "default", null, null).get();
-		Wallet wallet = Wallet.openWallet(walletName, null, null).get();
-
-		SignusResults.CreateAndStoreMyDidResult trusteeDidResult = Signus.createAndStoreMyDid(wallet, TRUSTEE_IDENTITY_JSON).get();
-		String trusteeDid = trusteeDidResult.getDid();
-
-		String schemaRequest = Ledger.buildSchemaRequest(trusteeDid, SCHEMA_DATA).get();
-		Ledger.signAndSubmitRequest(pool, wallet, trusteeDid, schemaRequest).get();
+		String response = Ledger.signAndSubmitRequest(pool, wallet, signerDid, schemaRequest).get();
+		checkResponseType(response,"REQNACK" );
 	}
 }

@@ -19,9 +19,11 @@ FOUNDATION_EXPORT const unsigned char indyVersionString[];
 #import <Indy/IndyAnoncreds.h>
 #import <Indy/IndyWallet.h>
 #import <Indy/IndyLedger.h>
-#import <Indy/IndySignus.h>
-#import <Indy/IndyAgent.h>
+#import <Indy/IndyDid.h>
 #import <Indy/IndyPairwise.h>
-
-
-
+#import <Indy/IndyCrypto.h>
+#import <Indy/IndyBlobStorage.h>
+#import <Indy/IndyPayment.h>
+#import <Indy/IndyNonSecrets.h>
+#import <Indy/IndyUtils.h>
+#import <Indy/IndyLogger.h>

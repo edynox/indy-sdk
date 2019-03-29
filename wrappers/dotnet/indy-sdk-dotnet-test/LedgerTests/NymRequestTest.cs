@@ -1,5 +1,5 @@
-﻿using Hyperledger.Indy.LedgerApi;
-using Hyperledger.Indy.SignusApi;
+﻿using Hyperledger.Indy.DidApi;
+using Hyperledger.Indy.LedgerApi;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Linq;
 using System;
@@ -17,9 +17,9 @@ namespace Hyperledger.Indy.Test.LedgerTests
         [TestMethod]
         public async Task TestBuildNymRequestWorksForOnlyRequiredFields()
         {
-            var expectedResult = string.Format("\"identifier\":\"{0}\",\"operation\":{{\"dest\":\"{1}\",\"type\":\"1\"}}", DID1, _dest);
+            var expectedResult = string.Format("\"identifier\":\"{0}\",\"operation\":{{\"dest\":\"{1}\",\"type\":\"1\"}}", DID, _dest);
 
-            var nymRequest = await Ledger.BuildNymRequestAsync(DID1, _dest, null, null, null);
+            var nymRequest = await Ledger.BuildNymRequestAsync(DID, _dest, null, null, null);
 
             Assert.IsTrue(nymRequest.Contains(expectedResult));
         }
@@ -27,17 +27,15 @@ namespace Hyperledger.Indy.Test.LedgerTests
         [TestMethod]
         public async Task TestBuildNymRequestWorksForEmptyRole()
         {
-            var expectedResult = string.Format("\"identifier\":\"{0}\",\"operation\":{{\"dest\":\"{1}\",\"role\":null,\"type\":\"1\"}}", DID1, _dest);
+            var expectedResult = string.Format("\"identifier\":\"{0}\",\"operation\":{{\"dest\":\"{1}\",\"role\":null,\"type\":\"1\"}}", DID, _dest);
 
-            var nymRequest = await Ledger.BuildNymRequestAsync(DID1, _dest, null, null, string.Empty);
+            var nymRequest = await Ledger.BuildNymRequestAsync(DID, _dest, null, null, string.Empty);
             Assert.IsTrue(nymRequest.Contains(expectedResult));
         } 
 
         [TestMethod]
         public async Task TestBuildNymRequestWorksForOnlyOptionalFields()
         {
-            var verkey = "Anfh2rjAcxkE249DcdsaQl";
-
             var expectedResult = string.Format("\"identifier\":\"{0}\"," +
                     "\"operation\":{{" +
                     "\"alias\":\"{1}\"," +
@@ -45,9 +43,9 @@ namespace Hyperledger.Indy.Test.LedgerTests
                     "\"role\":\"2\"," + 
                     "\"type\":\"1\"," +                    
                     "\"verkey\":\"{3}\"" +
-                    "}}", DID1, _alias, _dest, verkey);
+                    "}}", DID, _alias, _dest, VERKEY_TRUSTEE);
 
-            var nymRequest = await Ledger.BuildNymRequestAsync(DID1, _dest, verkey, _alias, _role);
+            var nymRequest = await Ledger.BuildNymRequestAsync(DID, _dest, VERKEY_TRUSTEE, _alias, _role);
 
             Assert.IsTrue(nymRequest.Contains(expectedResult));
         }
@@ -55,33 +53,38 @@ namespace Hyperledger.Indy.Test.LedgerTests
         [TestMethod]
         public async Task TestBuildGetNymRequestWorks()
         {
-            var expectedResult = String.Format("\"identifier\":\"{0}\",\"operation\":{{\"type\":\"105\",\"dest\":\"{1}\"}}", DID1, _dest);
+            var expectedResult = String.Format("\"identifier\":\"{0}\",\"operation\":{{\"type\":\"105\",\"dest\":\"{1}\"}}", DID, _dest);
 
-            var nymRequest = await Ledger.BuildGetNymRequestAsync(DID1, _dest);
+            var nymRequest = await Ledger.BuildGetNymRequestAsync(DID, _dest);
 
             Assert.IsTrue(nymRequest.Contains(expectedResult));
         }
 
         [TestMethod]
+        public async Task TestBuildGetNymRequestWorksForDefaultSubmitter()
+        {
+             await Ledger.BuildGetNymRequestAsync(null, _dest);
+        }
+
+        [TestMethod]
         public async Task TestNymRequestWorksWithoutSignature()
         {
-            var didResult = await Signus.CreateAndStoreMyDidAsync(wallet, "{}");
+            var didResult = await Did.CreateAndStoreMyDidAsync(wallet, "{}");
             var did = didResult.Did;
 
             var nymRequest = await Ledger.BuildNymRequestAsync(did, did, null, null, null);
+            var response = await Ledger.SubmitRequestAsync(pool, nymRequest);
 
-            var ex = await Assert.ThrowsExceptionAsync<InvalidLedgerTransactionException>(() =>
-                Ledger.SubmitRequestAsync(pool, nymRequest)
-            );
+            CheckResponseType(response, "REQNACK");
         }
 
         [TestMethod]
         public async Task TestSendNymRequestsWorksForOnlyRequiredFields()
         {
-            var trusteeDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
+            var trusteeDidResult = await Did.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
             var trusteeDid = trusteeDidResult.Did;
 
-            var myDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, "{}");
+            var myDidResult = await Did.CreateAndStoreMyDidAsync(wallet, "{}");
             var myDid = myDidResult.Did;
 
             var nymRequest = await Ledger.BuildNymRequestAsync(trusteeDid, myDid, null, null, null);
@@ -93,10 +96,10 @@ namespace Hyperledger.Indy.Test.LedgerTests
         [TestMethod]
         public async Task TestSendNymRequestsWorksForOptionalFields()
         {
-            var trusteeDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
+            var trusteeDidResult = await Did.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
             var trusteeDid = trusteeDidResult.Did;
 
-            var myDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, "{}");
+            var myDidResult = await Did.CreateAndStoreMyDidAsync(wallet, "{}");
             var myDid = myDidResult.Did;
             var myVerKey = myDidResult.VerKey;
 
@@ -109,7 +112,7 @@ namespace Hyperledger.Indy.Test.LedgerTests
         [TestMethod]
         public async Task TestGetNymRequestWorks()
         {
-            var didResult = await Signus.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
+            var didResult = await Did.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
             var did = didResult.Did;
 
             var getNymRequest = await Ledger.BuildGetNymRequestAsync(did, did);
@@ -123,49 +126,45 @@ namespace Hyperledger.Indy.Test.LedgerTests
         [TestMethod]
         public async Task TestSendNymRequestsWorksForWrongSignerRole()
         {
-            var trusteeDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
+            var trusteeDidResult = await Did.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
             var trusteeDid = trusteeDidResult.Did;
 
-            var myDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, "{}");
+            var myDidResult = await Did.CreateAndStoreMyDidAsync(wallet, "{}");
             var myDid = myDidResult.Did;
 
             var nymRequest = await Ledger.BuildNymRequestAsync(trusteeDid, myDid, null, null, null);
             await Ledger.SignAndSubmitRequestAsync(pool, wallet, trusteeDid, nymRequest);
 
-            var myDidResult2 = await Signus.CreateAndStoreMyDidAsync(wallet, "{}");
+            var myDidResult2 = await Did.CreateAndStoreMyDidAsync(wallet, "{}");
             var myDid2 = myDidResult2.Did;
 
             var nymRequest2 = await Ledger.BuildNymRequestAsync(myDid, myDid2, null, null, null);
-
-            var ex = await Assert.ThrowsExceptionAsync<InvalidLedgerTransactionException>(() =>
-                Ledger.SignAndSubmitRequestAsync(pool, wallet, myDid, nymRequest2)
-            );
+            var response = await Ledger.SignAndSubmitRequestAsync(pool, wallet, myDid, nymRequest2);
+            CheckResponseType(response, "REQNACK");
         }
 
         [TestMethod]
         public async Task TestSendNymRequestsWorksForUnknownSigner()
         {
             var trusteeDidJson = "{\"seed\":\"000000000000000000000000Trustee9\"}";
-            var trusteeDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, trusteeDidJson);
+            var trusteeDidResult = await Did.CreateAndStoreMyDidAsync(wallet, trusteeDidJson);
             var trusteeDid = trusteeDidResult.Did;
 
-            var myDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, "{}");
+            var myDidResult = await Did.CreateAndStoreMyDidAsync(wallet, "{}");
             var myDid = myDidResult.Did;
 
             var nymRequest = await Ledger.BuildNymRequestAsync(trusteeDid, myDid, null, null, null);
-
-            var ex = await Assert.ThrowsExceptionAsync<InvalidLedgerTransactionException>(() =>
-                Ledger.SignAndSubmitRequestAsync(pool, wallet, trusteeDid, nymRequest)
-            );
+            var response = await Ledger.SignAndSubmitRequestAsync(pool, wallet, myDid, nymRequest);
+            CheckResponseType(response, "REQNACK");
         }
 
         [TestMethod]
         public async Task TestNymRequestsWorks()
         {
-            var trusteeDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
+            var trusteeDidResult = await Did.CreateAndStoreMyDidAsync(wallet, TRUSTEE_IDENTITY_JSON);
             var trusteeDid = trusteeDidResult.Did;
 
-            var myDidResult = await Signus.CreateAndStoreMyDidAsync(wallet, "{}");
+            var myDidResult = await Did.CreateAndStoreMyDidAsync(wallet, "{}");
             var myDid = myDidResult.Did;
             var myVerKey = myDidResult.VerKey;
 
@@ -173,20 +172,15 @@ namespace Hyperledger.Indy.Test.LedgerTests
             await Ledger.SignAndSubmitRequestAsync(pool, wallet, trusteeDid, nymRequest);
 
             var getNymRequest = await Ledger.BuildGetNymRequestAsync(myDid, myDid);
-            var getNymResponse = await Ledger.SubmitRequestAsync(pool, getNymRequest);
-
-            var getNymResponseObj = JObject.Parse(getNymResponse);
-
-            Assert.AreEqual("REPLY", (string)getNymResponseObj["op"]);
-            Assert.AreEqual("105", (string)getNymResponseObj["result"]["type"]);
-            Assert.AreEqual(myDid, (string)getNymResponseObj["result"]["dest"]);
+            var getNymResponse = PoolUtils.EnsurePreviousRequestAppliedAsync(pool, getNymRequest, response => { return CompareResponseType(response, "REPLY"); });
+            Assert.IsNotNull(getNymResponse);
         }
 
         [TestMethod]
         public async Task TestSendNymRequestsWorksForWrongRole()
         {
             var ex = await Assert.ThrowsExceptionAsync<InvalidStructureException>(() =>
-                Ledger.BuildNymRequestAsync(DID1, _dest, null, null, "WRONG_ROLE")
+                Ledger.BuildNymRequestAsync(DID, _dest, null, null, "WRONG_ROLE")
             );
         }
     }

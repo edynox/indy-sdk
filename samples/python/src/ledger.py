@@ -1,75 +1,93 @@
 import json
+import time
 
-from indy import ledger, signus, wallet, pool
-from src.utils import get_pool_genesis_txn_path
+from indy import ledger, did, wallet, pool
+from src.utils import get_pool_genesis_txn_path, run_coroutine, PROTOCOL_VERSION
 import logging
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 
 async def demo():
     logger.info("Ledger sample -> started")
 
-    pool_name = 'pool1'
-    my_wallet_name = 'my_wallet'
-    their_wallet_name = 'their_wallet'
-    seed_trustee1 = "000000000000000000000000Trustee1"
-    pool_genesis_txn_path = get_pool_genesis_txn_path(pool_name)
+    # Set protocol version 2 to work with Indy Node 1.4
+    await pool.set_protocol_version(PROTOCOL_VERSION)
 
-    # 1. Create ledger config from genesis txn file
-    pool_config = json.dumps({"genesis_txn": str(pool_genesis_txn_path)})
-    await pool.create_pool_ledger_config(pool_name, pool_config)
+    trustee = {
+        'seed': '000000000000000000000000Trustee1',
+        'wallet_config': json.dumps({'id': 'trustee_wallet'}),
+        'wallet_credentials': json.dumps({'key': 'trustee_wallet_key'}),
+        'pool_name': 'trustee_pool',
+    }
 
-    # 2. Open pool ledger
-    pool_handle = await pool.open_pool_ledger(pool_name, None)
+    # 1. Trustee open pool ledger
+    trustee['genesis_txn_path'] = get_pool_genesis_txn_path(trustee['pool_name'])
+    trustee['pool_config'] = json.dumps({"genesis_txn": str(trustee['genesis_txn_path'])})
+    await pool.create_pool_ledger_config(trustee['pool_name'], trustee['pool_config'])
 
-    # 3. Create My Wallet and Get Wallet Handle
-    await wallet.create_wallet(pool_name, my_wallet_name, None, None, None)
-    my_wallet_handle = await wallet.open_wallet(my_wallet_name, None, None)
+    trustee['pool'] = await pool.open_pool_ledger(trustee['pool_name'], None)
 
-    # 4. Create Their Wallet and Get Wallet Handle
-    await wallet.create_wallet(pool_name, their_wallet_name, None, None, None)
-    their_wallet_handle = await wallet.open_wallet(their_wallet_name, None, None)
+    # 2. Create Trustee Wallet and Get Wallet Handle
+    await wallet.create_wallet(trustee['wallet_config'], trustee['wallet_credentials'])
+    trustee['wallet'] = await wallet.open_wallet(trustee['wallet_config'], trustee['wallet_credentials'])
 
-    # 5. Create My DID
-    (my_did, my_verkey, my_pk) = await signus.create_and_store_my_did(my_wallet_handle, "{}")
+    # 3. Create Trustee DID
+    (trustee['did'], trustee['verkey']) = \
+        await did.create_and_store_my_did(trustee['wallet'], json.dumps({"seed": trustee['seed']}))
 
-    # 6. Create Their DID from Trustee1 seed
-    (their_did, their_verkey, their_pk) = \
-        await signus.create_and_store_my_did(their_wallet_handle, json.dumps({"seed": seed_trustee1}))
+    # 4. User init
+    user = {
+        'wallet_config': json.dumps({'id': 'user_wallet'}),
+        'wallet_credentials': json.dumps({'key': 'user_wallet_key'}),
+        'pool_name': 'user_pool'
+    }
 
-    # 7. Store Their DID
-    their_identity_json = json.dumps({
-        'did': their_did,
-        'pk': their_pk,
-        'verkey': their_verkey
-    })
+    user['genesis_txn_path'] = get_pool_genesis_txn_path(user['pool_name'])
+    user['pool_config'] = json.dumps({"genesis_txn": str(user['genesis_txn_path'])})
+    await pool.create_pool_ledger_config(user['pool_name'], user['pool_config'])
 
-    await signus.store_their_did(my_wallet_handle, their_identity_json)
+    user['pool'] = await pool.open_pool_ledger(user['pool_name'], None)
 
-    # 8. Prepare and send NYM transaction
-    nym_txn_req = await ledger.build_nym_request(their_did, my_did, None, None, None)
-    await ledger.sign_and_submit_request(pool_handle, their_wallet_handle, their_did, nym_txn_req)
+    await wallet.create_wallet(user['wallet_config'], user['wallet_credentials'])
+    user['wallet'] = await wallet.open_wallet(user['wallet_config'], user['wallet_credentials'])
 
-    # 9. Prepare and send GET_NYM request
-    get_nym_txn_req = await ledger.build_get_nym_request(their_did, my_did)
-    get_nym_txn_resp = await ledger.submit_request(pool_handle, get_nym_txn_req)
+    # 5. User create DID
+    (user['did'], user['verkey']) = await did.create_and_store_my_did(user['wallet'], "{}")
 
-    get_nym_txn_resp = json.loads(get_nym_txn_resp)
+    trustee['user_did'] = user['did']
+    trustee['user_verkey'] = user['verkey']
 
-    assert get_nym_txn_resp['result']['dest'] == my_did
+    # 6. Trustee prepare and send NYM transaction for user
+    nym_req = await ledger.build_nym_request(trustee['did'], trustee['user_did'], trustee['user_verkey'], None, None)
+    await ledger.sign_and_submit_request(trustee['pool'], trustee['wallet'], trustee['did'], nym_req)
 
-    # 10. Close wallets and pool
-    await wallet.close_wallet(their_wallet_handle)
-    await wallet.close_wallet(my_wallet_handle)
-    await pool.close_pool_ledger(pool_handle)
+    # 7. User send ATTRIB transaction to Ledger
+    attr_req = \
+        await ledger.build_attrib_request(user['did'], user['did'], None, '{"endpoint":{"ha":"127.0.0.1:5555"}}', None)
+    resp = await ledger.sign_and_submit_request(user['pool'], user['wallet'], user['did'], attr_req)
 
-    # 11. Delete wallets
-    await wallet.delete_wallet(my_wallet_name, None)
-    await wallet.delete_wallet(their_wallet_name, None)
+    assert json.loads(resp)['op'] == 'REPLY'
 
-    # 12. Delete pool ledger config
-    await pool.delete_pool_ledger_config(pool_name)
+    # 8. Close and delete Trustee wallet
+    await wallet.close_wallet(trustee['wallet'])
+    await wallet.delete_wallet(trustee['wallet_config'], trustee['wallet_credentials'])
+
+    # 9. Close and delete User wallet
+    await wallet.close_wallet(user['wallet'])
+    await wallet.delete_wallet(user['wallet_config'], user['wallet_credentials'])
+
+    # 10. Close Trustee and User pools
+    await pool.close_pool_ledger(trustee['pool'])
+    await pool.close_pool_ledger(user['pool'])
+
+    # 11 Delete pool ledger config
+    await pool.delete_pool_ledger_config(trustee['pool_name'])
+    await pool.delete_pool_ledger_config(user['pool_name'])
 
     logger.info("Ledger sample -> completed")
+
+
+if __name__ == '__main__':
+    run_coroutine(demo)
+    time.sleep(1)  # FIXME waiting for libindy thread complete

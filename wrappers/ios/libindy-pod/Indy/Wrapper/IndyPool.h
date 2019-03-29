@@ -23,12 +23,11 @@
  
  @param name Name of the pool ledger configuration.
  @param poolConfig Pool configuration json. if NULL, then default config will be used. See example above.
- 
- @return Error Code
+ @param completion Completion block, returns error code.
  */
-+ (NSError *)createPoolLedgerConfigWithPoolName:(NSString *)name
-                                     poolConfig:(NSString *)poolConfig
-                                     completion:(void (^)(NSError *error)) handler;
++ (void)createPoolLedgerConfigWithPoolName:(NSString *)name
+                                poolConfig:(NSString *)poolConfig
+                                completion:(void (^)(NSError *error))completion;
 
 /**
  Opens pool ledger and performs connecting to pool nodes.
@@ -39,58 +38,65 @@
  It is impossible to open pool with the same name more than once.
  
  @code
- Example poolConfig:
+ Example poolConfig
   {
-      "refresh_on_open": bool (optional), Forces pool ledger to be refreshed immediately after opening.
-                       Defaults to true.
-      "auto_refresh_time": int (optional), After this time in minutes pool ledger will be automatically refreshed.
-                         Use 0 to disable automatic refresh. Defaults to 24*60.
-      "network_timeout": int (optional), Network timeout for communication with nodes in milliseconds.
-                        Defaults to 20000.
+      "timeout": int (optional), Timeout for network request (in sec).
+      "extended_timeout": int (optional), Extended timeout for network request (in sec).
+      "preordered_nodes": array<string> (optional), Names of nodes which will have a priority during request sending:
+            [ "name_of_1st_prior_node",  "name_of_2nd_prior_node", .... ]
+            Note: Not specified nodes will be placed in a random way.
   }
  @endcode
  
  @param name Name of the pool ledger configuration.
  @param poolConfig Runtime pool configuration json. Optional. If NULL, then default config will be used. See example above.
- @param handler Callback returns handle to opened pool to use in methods that require pool connection.
- 
- @return Error Code
+ @param completion Callback returns handle to opened pool to use in methods that require pool connection.
  */
-+ (NSError *)openPoolLedgerWithName:(NSString *)name
-                         poolConfig:(NSString *)poolConfig
-                         completion:(void (^)(NSError *error, IndyHandle poolHandle)) handler;
++ (void)openPoolLedgerWithName:(NSString *)name
+                    poolConfig:(NSString *)poolConfig
+                    completion:(void (^)(NSError *error, IndyHandle poolHandle))completion;
 
 /**
  Refreshes a local copy of a pool ledger and updates pool nodes connections.
  
  @param poolHandle Pool handle returned by IndyPool::openPoolLedgerWithName
- @param handler Callback, returns error code.
- 
- @return Error Code
+ @param completion Callback, returns error code.
  */
-+ (NSError *)refreshPoolLedgerWithHandle:(IndyHandle)poolHandle
-                              completion:(void (^)(NSError *error)) handler;
++ (void)refreshPoolLedgerWithHandle:(IndyHandle)poolHandle
+                         completion:(void (^)(NSError *error))completion;
 
 /**
  Closes opened pool ledger, opened nodes connections and frees allocated resources.
  
  @param poolHandle Pool handle returned by IndyPool::openPoolLedgerWithName.
- @param handler Completion callback, returns error code.
-
- @return Error Code
+ @param completion Completion callback, returns error code.
  */
-+ (NSError *)closePoolLedgerWithHandle:(IndyHandle)poolHandle
-                            completion:(void (^)(NSError *error)) handler;
++ (void)closePoolLedgerWithHandle:(IndyHandle)poolHandle
+                       completion:(void (^)(NSError *error))completion;
 
 /**
  Deletes created pool ledger configuration.
 
  @param name Name of the pool ledger configuration to delete.
- @param handler Completion callback, returns error code.
- 
- @return Error Code
+ @param completion Completion callback, returns error code.
  */
-+ (NSError *)deletePoolLedgerConfigWithName:(NSString *)name
-                                 completion:(void (^)(NSError *error)) handler;
++ (void)deletePoolLedgerConfigWithName:(NSString *)name
+                            completion:(void (^)(NSError *error))completion;
+
+/**
+ Set PROTOCOL_VERSION to specific version.
+
+ There is a global property PROTOCOL_VERSION that used in every request to the pool and
+ specified version of Indy Node which Libindy works.
+
+ By default PROTOCOL_VERSION=1.
+ 
+ @param protocolVersion Protocol version will be used:
+    1 - for Indy Node 1.3
+    2 - for Indy Node 1.4 and greater
+ @param completion Completion callback, returns error code.
+ */
++ (void)setProtocolVersion:(NSNumber *)protocolVersion
+                completion:(void (^)(NSError *error))completion;
 
 @end

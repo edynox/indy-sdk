@@ -1,12 +1,11 @@
 package org.hyperledger.indy.sdk.pool;
 
-import org.hyperledger.indy.sdk.ErrorCode;
-import org.hyperledger.indy.sdk.ErrorCodeMatcher;
 import org.hyperledger.indy.sdk.IndyIntegrationTest;
 import org.hyperledger.indy.sdk.pool.PoolJSONParameters.OpenPoolLedgerJSONParameter;
 import org.hyperledger.indy.sdk.utils.PoolUtils;
 import org.junit.Test;
 
+import static org.hamcrest.CoreMatchers.isA;
 import static org.junit.Assert.assertNotNull;
 
 public class OpenPoolTest extends IndyIntegrationTest {
@@ -25,7 +24,7 @@ public class OpenPoolTest extends IndyIntegrationTest {
 	public void testOpenPoolWorksForConfig() throws Exception {
 		String poolName = PoolUtils.createPoolLedgerConfig();
 
-		OpenPoolLedgerJSONParameter config = new OpenPoolLedgerJSONParameter(true, null, null);
+		OpenPoolLedgerJSONParameter config = new OpenPoolLedgerJSONParameter(20, 80);
 		Pool pool = Pool.openPoolLedger(poolName, config.toJson()).get();
 
 		assertNotNull(pool);
@@ -34,7 +33,7 @@ public class OpenPoolTest extends IndyIntegrationTest {
 
 	@Test
 	public void testOpenPoolWorksForTwice() throws Exception {
-		thrown.expectCause(new ErrorCodeMatcher(ErrorCode.PoolLedgerInvalidPoolHandle));
+		thrown.expectCause(isA(InvalidPoolException.class));
 
 		String poolName = PoolUtils.createPoolLedgerConfig();
 
@@ -47,7 +46,7 @@ public class OpenPoolTest extends IndyIntegrationTest {
 
 	@Test
 	public void testOpenPoolWorksForTwoNodes() throws Exception {
-		String poolName = PoolUtils.createPoolLedgerConfig(2);
+		String poolName = PoolUtils.createPoolLedgerConfig();
 
 		Pool pool = Pool.openPoolLedger(poolName, null).get();
 
@@ -57,7 +56,7 @@ public class OpenPoolTest extends IndyIntegrationTest {
 
 	@Test
 	public void testOpenPoolWorksForThreeNodes() throws Exception {
-		String poolName = PoolUtils.createPoolLedgerConfig(3);
+		String poolName = PoolUtils.createPoolLedgerConfig();
 
 		Pool pool = Pool.openPoolLedger(poolName, null).get();
 
@@ -65,4 +64,17 @@ public class OpenPoolTest extends IndyIntegrationTest {
 		openedPools.add(pool);
 	}
 
+
+	@Test
+	public void testOpenPoolWorksForIncompatibleProtocolVersion() throws Exception {
+		thrown.expectCause(isA(PoolIncompatibleProtocolVersionException.class));
+
+		Pool.setProtocolVersion(1).get();
+
+		String poolName = PoolUtils.createPoolLedgerConfig();
+
+		Pool.openPoolLedger(poolName, null).get();
+
+		Pool.setProtocolVersion(PROTOCOL_VERSION).get();
+	}
 }

@@ -1,7 +1,8 @@
 ﻿using Hyperledger.Indy.AnonCredsApi;
+using Hyperledger.Indy.WalletApi;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System;
 using System.Threading.Tasks;
 
 namespace Hyperledger.Indy.Test.AnonCredsTests
@@ -9,143 +10,70 @@ namespace Hyperledger.Indy.Test.AnonCredsTests
     [TestClass]
     public class ProverCreateProofTest : AnonCredsIntegrationTestBase
     {
+        private readonly string requestedCredentialsJson = string.Format("{{" +
+            "\"self_attested_attributes\":{{}}," +
+            "\"requested_attributes\":{{\"attr1_referent\":{{\"cred_id\":\"{0}\", \"revealed\":true}}}}," +
+            "\"requested_predicates\":{{\"predicate1_referent\":{{\"cred_id\":\"{1}\"}}}}" +
+            "}}", credentialId1, credentialId1);
+
         [TestMethod]
         public async Task TestProverCreateProofWorks()
         {
-            await InitCommonWallet();
+            var schemasJson = new JObject(new JProperty(gvtSchemaId, JObject.Parse(gvtSchema))).ToString();
+            var credentialDefsJson = new JObject(new JProperty(issuer1gvtCredDefId, JObject.Parse(issuer1gvtCredDef))).ToString();
+            var revocStatesJson = "{}";
 
-            var proofRequest = "{\"nonce\":\"123432421212\",\n" +
-                    "                                \"name\":\"proof_req_1\",\n" +
-                    "                                \"version\":\"0.1\",\n" +
-                    "                                \"requested_attrs\":{\"attr1_uuid\":{\"schema_seq_no\":1, \"name\":\"name\"}},\n" +
-                    "                                \"requested_predicates\":{\"predicate1_uuid\":{\"attr_name\":\"age\",\"p_type\":\"GE\",\"value\":18}}\n" +
-                    "                              }";
+            var proofJson = await AnonCreds.ProverCreateProofAsync(
+                wallet, 
+                proofRequest, 
+                requestedCredentialsJson,
+                masterSecretId, 
+                schemasJson, 
+                credentialDefsJson, 
+                revocStatesJson);
 
-            var claimsJson = await AnonCreds.ProverGetClaimsForProofReqAsync(commonWallet, proofRequest);                
-
-            var claims = JObject.Parse(claimsJson);
-
-            var claimForAttribute = claims["attrs"]["attr1_uuid"][0];
-
-            var claimUuid = claimForAttribute.Value<string>("claim_uuid");
-
-            var requestedClaimsJson = string.Format("{{\n" +
-                    "                                          \"self_attested_attributes\":{{}},\n" +
-                    "                                          \"requested_attrs\":{{\"attr1_uuid\":[\"{0}\", true]}},\n" +
-                    "                                          \"requested_predicates\":{{\"predicate1_uuid\":\"{1}\"}}\n" +
-                    "                                        }}", claimUuid, claimUuid);
-
-            var schemasJson = string.Format("{{\"{0}\":{1}}}", claimUuid, schema);
-            var claimDefsJson = string.Format("{{\"{0}\":{1}}}", claimUuid, claimDef);
-            var revocRegsJson = "{}";
-
-            var proofJson = await AnonCreds.ProverCreateProofAsync(commonWallet, proofRequest, requestedClaimsJson, schemasJson,
-                    masterSecretName, claimDefsJson, revocRegsJson);
             Assert.IsNotNull(proofJson);
         }
-
-
+        
         [TestMethod]
         public async Task TestProverCreateProofWorksForUsingNotSatisfyClaim()
         {
-            await InitCommonWallet();
+            var requestedCredentialsJson = string.Format("{{\"self_attested_attributes\":{{}},\n" +
+                 "                                    \"requested_attributes\":{{\"attr1_referent\":{{\"cred_id\":\"{0}\", \"revealed\":true}}}},\n" +
+                 "                                    \"requested_predicates\":{{}}\n" +
+                 "                                   }}", credentialId2);
 
-            var claimsJson = await AnonCreds.ProverGetClaimsAsync(commonWallet, "{}");
+            var schemasJson = new JObject(new JProperty(xyzSchemaId, xyzSchema)).ToString();
+            var credentialDefsJson = new JObject(new JProperty(issuer1xyzCredDef, issuer1xyzCredDef)).ToString();
+            var revocStatesJson = "{}";
 
-            var claims = JArray.Parse(claimsJson);
-
-            var claimUuid = claims[0].Value<string>("claim_uuid");
-
-            var proofRequest = "{\"nonce\":\"123432421212\",\n" +
-                    "               \"name\":\"proof_req_1\",\n" +
-                    "               \"version\":\"0.1\",\n" +
-                    "               \"requested_attrs\":{\"attr1_uuid\":{\"schema_seq_no\":1, \"name\":\"some_attr\"}},\n" +
-                    "               \"requested_predicates\":{}\n" +
-                    "              }";
-
-            var requestedClaimsJson = string.Format("{{\"self_attested_attributes\":{{}},\n" +
-                    "                                    \"requested_attrs\":{{\"attr1_uuid\":[\"{0}\", true]}},\n" +
-                    "                                    \"requested_predicates\":{{}}\n" +
-                    "                                   }}", claimUuid);
-
-            var schemasJson = string.Format("{{\"{0}\":{1}}}", claimUuid, schema);
-            var claimDefsJson = string.Format("{{\"{0}\":{1}}}", claimUuid, claimDef);
-            var revocRegsJson = "{}";
-
-            var ex = await Assert.ThrowsExceptionAsync<InvalidStructureException>(() =>
-                AnonCreds.ProverCreateProofAsync(commonWallet, proofRequest, requestedClaimsJson, schemasJson,
-                    masterSecretName, claimDefsJson, revocRegsJson)
+            await Assert.ThrowsExceptionAsync<InvalidStructureException>(() =>
+                AnonCreds.ProverCreateProofAsync(wallet, proofRequest, requestedCredentialsJson, 
+                    masterSecretId, schemasJson, credentialDefsJson, revocStatesJson)
             );
         }
 
         [TestMethod]
         public async Task TestProverCreateProofWorksForInvalidMasterSecret()
         {
-            await InitCommonWallet();
-
-            var proofRequest = "{\"nonce\":\"123432421212\",\n" +
-                "                                \"name\":\"proof_req_1\",\n" +
-                "                                \"version\":\"0.1\",\n" +
-                "                                \"requested_attrs\":{\"attr1_uuid\":{\"schema_seq_no\":1, \"name\":\"name\"}},\n" +
-                "                                \"requested_predicates\":{\"predicate1_uuid\":{\"attr_name\":\"age\",\"p_type\":\"GE\",\"value\":18}}\n" +
-                "                              }";
-
-            var claimsJson = await AnonCreds.ProverGetClaimsForProofReqAsync(commonWallet, proofRequest);
-
-            var claims = JObject.Parse(claimsJson);
-
-            var claimForAttribute = claims["attrs"]["attr1_uuid"][0];
-
-            var claimUuid = claimForAttribute.Value<string>("claim_uuid");
-
-            var requestedClaimsJson = string.Format("{{\n" +
-                    "                                          \"self_attested_attributes\":{{}},\n" +
-                    "                                          \"requested_attrs\":{{\"attr1_uuid\":[\"{0}\", true]}},\n" +
-                    "                                          \"requested_predicates\":{{\"predicate1_uuid\":\"{1}\"}}\n" +
-                    "                                        }}", claimUuid, claimUuid);
-
-            var schemasJson = string.Format("{{\"{0}\":{1}}}", claimUuid, schema);
-            var claimDefsJson = string.Format("{{\"{0}\":{1}}}", claimUuid, claimDef);
-            var revocRegsJson = "{}";
+            var schemasJson = new JObject(new JProperty(gvtSchemaId, JObject.Parse(gvtSchema))).ToString();
+            var credentialDefsJson = new JObject(new JProperty(issuer1gvtCredDefId, JObject.Parse(issuer1gvtCredDef))).ToString();
+            var revocStatesJson = "{}";
             
-            var ex = await Assert.ThrowsExceptionAsync<WalletValueNotFoundException>(() =>
-                AnonCreds.ProverCreateProofAsync(commonWallet, proofRequest, requestedClaimsJson, schemasJson, "wrong_master_secret", claimDefsJson, revocRegsJson)
-
+            var ex = await Assert.ThrowsExceptionAsync<WalletItemNotFoundException>(() =>
+                AnonCreds.ProverCreateProofAsync(wallet, proofRequest, requestedCredentialsJson, "wrong_master_secret", schemasJson, credentialDefsJson, revocStatesJson)
             );
         }
 
         [TestMethod]
         public async Task TestProverCreateProofWorksForInvalidSchemas()
         {
-            await InitCommonWallet();
-
-            var proofRequest = "{\"nonce\":\"123432421212\",\n" +
-                "                                \"name\":\"proof_req_1\",\n" +
-                "                                \"version\":\"0.1\",\n" +
-                "                                \"requested_attrs\":{\"attr1_uuid\":{\"schema_seq_no\":1, \"name\":\"name\"}},\n" +
-                "                                \"requested_predicates\":{\"predicate1_uuid\":{\"attr_name\":\"age\",\"p_type\":\"GE\",\"value\":18}}\n" +
-                "                              }";
-
-            var claimsJson = await AnonCreds.ProverGetClaimsForProofReqAsync(commonWallet, proofRequest);
-
-            var claims = JObject.Parse(claimsJson);
-
-            var claimForAttribute = claims["attrs"]["attr1_uuid"][0];
-
-            var claimUuid = claimForAttribute.Value<string>("claim_uuid");
-
-            var requestedClaimsJson = string.Format("{{\n" +
-                    "                                          \"self_attested_attributes\":{{}},\n" +
-                    "                                          \"requested_attrs\":{{\"attr1_uuid\":[\"{0}\", true]}},\n" +
-                    "                                          \"requested_predicates\":{{\"predicate1_uuid\":\"{1}\"}}\n" +
-                    "                                        }}", claimUuid, claimUuid);
-
             var schemasJson = "{}";
-            var claimDefsJson = string.Format("{{\"{0}\":{1}}}", claimUuid, claimDef);
-            var revocRegsJson = "{}";
+            var credentialDefsJson = new JObject(new JProperty(issuer1gvtCredDefId, issuer1gvtCredDef)).ToString();
+            var revocStatesJson = "{}";
 
             var ex = await Assert.ThrowsExceptionAsync<InvalidStructureException>(() =>
-                AnonCreds.ProverCreateProofAsync(commonWallet, proofRequest, requestedClaimsJson, schemasJson, masterSecretName, claimDefsJson, revocRegsJson)
+                AnonCreds.ProverCreateProofAsync(wallet, proofRequest, requestedCredentialsJson, masterSecretId, schemasJson, credentialDefsJson, revocStatesJson)
 
             );
         }
@@ -153,33 +81,16 @@ namespace Hyperledger.Indy.Test.AnonCredsTests
         [TestMethod]
         public async Task TestProverCreateProofWorksForInvalidRequestedClaimsJson()
         {
-            await InitCommonWallet();
+            var schemasJson = new JObject(new JProperty(gvtSchemaId, gvtSchema)).ToString();
+            var credentialDefsJson = new JObject(new JProperty(issuer1gvtCredDefId, issuer1gvtCredDef)).ToString();
+            var revocStatesJson = "{}";
+            var requestedCredentialsJson = JsonConvert.SerializeObject(
+                new { self_attested_attributes = new JObject(), requested_predicates = new JObject() }
+            );
 
-            var proofRequest = "{\"nonce\":\"123432421212\",\n" +
-                "                                \"name\":\"proof_req_1\",\n" +
-                "                                \"version\":\"0.1\",\n" +
-                "                                \"requested_attrs\":{\"attr1_uuid\":{\"schema_seq_no\":1, \"name\":\"name\"}},\n" +
-                "                                \"requested_predicates\":{\"predicate1_uuid\":{\"attr_name\":\"age\",\"p_type\":\"GE\",\"value\":18}}\n" +
-                "                              }";
-
-            var claimsJson = await AnonCreds.ProverGetClaimsForProofReqAsync(commonWallet, proofRequest);
-
-            var claims = JObject.Parse(claimsJson);
-
-            var claimForAttribute = claims["attrs"]["attr1_uuid"][0];
-
-            var claimUuid = claimForAttribute.Value<string>("claim_uuid");
-
-            String requestedClaimsJson = "{\"self_attested_attributes\":{},\n" +
-                "                      \"requested_predicates\":{}\n" +
-                "                    }";
-
-            var schemasJson = string.Format("{{\"{0}\":{1}}}", claimUuid, schema);
-            var claimDefsJson = string.Format("{{\"{0}\":{1}}}", claimUuid, claimDef);
-            var revocRegsJson = "{}";
 
             var ex = await Assert.ThrowsExceptionAsync<InvalidStructureException>(() =>
-                AnonCreds.ProverCreateProofAsync(commonWallet, proofRequest, requestedClaimsJson, schemasJson, "wrong_master_secret", claimDefsJson, revocRegsJson)
+                AnonCreds.ProverCreateProofAsync(wallet, proofRequest, requestedCredentialsJson, masterSecretId, schemasJson, credentialDefsJson, revocStatesJson)
 
             );
         }

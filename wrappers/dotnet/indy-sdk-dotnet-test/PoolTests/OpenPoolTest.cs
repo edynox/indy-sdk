@@ -23,7 +23,7 @@ namespace Hyperledger.Indy.Test.PoolTests
         {
             var poolName = PoolUtils.CreatePoolLedgerConfig();
 
-            var config = "{\"refresh_on_open\":true,\"auto_refresh_time\":false,\"network_timeout\":false}";
+            var config = "{\"timeout\":20,\"extended_timeout\":80}";
             var pool = await Pool.OpenPoolLedgerAsync(poolName, config);
 
 
@@ -40,31 +40,24 @@ namespace Hyperledger.Indy.Test.PoolTests
             Assert.IsNotNull(pool);
             openedPools.Add(pool);
 
-            var ex = await Assert.ThrowsExceptionAsync<PoolClosedException>(() =>
+            var ex = await Assert.ThrowsExceptionAsync<InvalidPoolException>(() =>
                Pool.OpenPoolLedgerAsync(poolName, null)
             );
         }
 
         [TestMethod]
-        public async Task TestOpenPoolWorksForTwoNodes()
+        public async Task TestOpenPoolWorksForIncompatibleProtocolVersion()
         {
-            var poolName = PoolUtils.CreatePoolLedgerConfig(2);
-
+            await Pool.SetProtocolVersionAsync(PROTOCOL_VERSION);
+            var poolName = PoolUtils.CreatePoolLedgerConfig();
             var pool = await Pool.OpenPoolLedgerAsync(poolName, null);
 
             Assert.IsNotNull(pool);
             openedPools.Add(pool);
-        }
 
-        [TestMethod]
-        public async Task TestOpenPoolWorksForThreeNodes()
-        {
-            var poolName = PoolUtils.CreatePoolLedgerConfig(3);
-
-            var pool = await Pool.OpenPoolLedgerAsync(poolName, null);
-
-            Assert.IsNotNull(pool);
-            openedPools.Add(pool);
+            var ex = await Assert.ThrowsExceptionAsync<PoolIncompatibleProtocolVersionException>(() =>
+               Pool.SetProtocolVersionAsync(10)
+            );
         }
     }
 }

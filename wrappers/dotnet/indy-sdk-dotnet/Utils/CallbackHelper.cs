@@ -1,14 +1,27 @@
 ﻿using System.Threading.Tasks;
-using static Hyperledger.Indy.IndyNativeMethods;
+
+#if __IOS__
+using ObjCRuntime;
+#endif
 
 namespace Hyperledger.Indy.Utils
 {
     internal static class CallbackHelper
     {
         /// <summary>
+        /// Delegate for callbacks that only include the success or failure of command execution.
+        /// </summary>
+        /// <param name="xcommand_handle">The handle for the command that initiated the callback.</param>
+        /// <param name="err">The outcome of execution of the command.</param>
+        internal delegate void IndyMethodCompletedDelegate(int xcommand_handle, int err);
+
+        /// <summary>
         /// Gets the callback to use for completing tasks that don't return a value.
         /// </summary>
-        public static NoValueDelegate TaskCompletingNoValueCallback = (xcommand_handle, err) =>
+#if __IOS__
+        [MonoPInvokeCallback(typeof(IndyMethodCompletedDelegate))]
+#endif
+        public static void TaskCompletingNoValueCallbackMethod(int xcommand_handle, int err)
         {
             var taskCompletionSource = PendingCommands.Remove<bool>(xcommand_handle);
 
@@ -16,15 +29,20 @@ namespace Hyperledger.Indy.Utils
                 return;
 
             taskCompletionSource.SetResult(true);
-        };
+        }
+        public static IndyMethodCompletedDelegate TaskCompletingNoValueCallback = TaskCompletingNoValueCallbackMethod;
 
         /// <summary>
         /// Gets the callback to use for functions that don't return a value and are not associated with a task.
         /// </summary>
-        public static NoValueDelegate NoValueCallback = (xcommand_handle, err) =>
+#if __IOS__
+        [MonoPInvokeCallback(typeof(IndyMethodCompletedDelegate))]
+#endif
+        public static void NoValueCallbackMethod(int xcommand_handle, int err)
         {
             CheckCallback(err);
-        };
+        }
+        public static IndyMethodCompletedDelegate NoValueCallback = NoValueCallbackMethod;
 
         /// <summary>
         /// Checks the result from a Sovrin function call.

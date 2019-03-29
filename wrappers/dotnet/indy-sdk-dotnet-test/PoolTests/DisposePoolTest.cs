@@ -1,9 +1,5 @@
 ﻿using Hyperledger.Indy.PoolApi;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Hyperledger.Indy.Test.PoolTests
@@ -53,7 +49,7 @@ namespace Hyperledger.Indy.Test.PoolTests
             var pool = await Pool.OpenPoolLedgerAsync(poolName, null);
             pool.Dispose();
 
-            var ex = await Assert.ThrowsExceptionAsync<PoolClosedException>(() =>
+            var ex = await Assert.ThrowsExceptionAsync<InvalidPoolException>(() =>
                 pool.CloseAsync()
             );
         }      

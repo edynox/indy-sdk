@@ -1,24 +1,24 @@
 ﻿using System;
 using System.Threading.Tasks;
+using Hyperledger.Indy.PoolApi;
 
 namespace Hyperledger.Indy.Samples
 {
-    class Program
+    public class Program
     {
-        static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
-            ExecuteDemos().Wait();
+            await Pool.SetProtocolVersionAsync(2);
+
+            await WalletDemo.Execute();
+            await NonSecretsDemo.Execute();
+            await AnonCredsDemo.Execute();
+            await AnonCredsRevocationDemo.Execute();
+            await CryptoDemo.Execute();
+            await LedgerDemo.Execute();
 
             Console.WriteLine("Press any key to continue...");
             Console.ReadKey(true);
-        }
-
-        static async Task ExecuteDemos()
-        {
-            await AgentDemo.Execute();
-            await AnonCredsDemo.Execute();
-            await LedgerDemo.Execute();
-            await SignusDemo.Execute();
         }
     }
 }

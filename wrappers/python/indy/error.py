@@ -1,4 +1,5 @@
 from enum import IntEnum
+from typing import Optional
 
 
 class ErrorCode(IntEnum):
@@ -45,7 +46,7 @@ class ErrorCode(IntEnum):
     # Invalid library state was detected in runtime. It signals library bug
     CommonInvalidState = 112,
 
-    # Object (json, config, key, claim and etc...) passed by library caller has invalid structure
+    # Object (json, config, key, credential and etc...) passed by library caller has invalid structure
     CommonInvalidStructure = 113,
 
     # IO Error
@@ -73,6 +74,30 @@ class ErrorCode(IntEnum):
     # Trying to open wallet that was opened already
     WalletAlreadyOpenedError = 206,
 
+    # Input provided to wallet operations is considered not valid
+    WalletAccessFailed = 207,
+
+    # Attempt to open encrypted wallet with invalid credentials
+    WalletInputError = 208,
+
+    # Decoding of wallet data during input/output failed
+    WalletDecodingError = 209,
+
+    # Storage error occurred during wallet operation
+    WalletStorageError = 210,
+
+    # Error during encryption-related operations
+    WalletEncryptionError = 211,
+
+    # Requested wallet item not found
+    WalletItemNotFound = 212,
+
+    # Returned if wallet's add_record operation is used with record name that already exists
+    WalletItemAlreadyExists = 213,
+
+    # Returned if provided wallet query is invalid
+    WalletQueryError = 214,
+
     # Ledger errors
     # Trying to open pool ledger that wasn't created before
     PoolLedgerNotCreatedError = 300,
@@ -83,10 +108,10 @@ class ErrorCode(IntEnum):
     # Pool ledger terminated
     PoolLedgerTerminated = 302,
 
-    # No concensus during ledger operation
+    # No consensus during ledger operation
     LedgerNoConsensusError = 303,
 
-    # Attempt to send unknown or incomplete transaction message
+    # Attempt to parse invalid transaction response
     LedgerInvalidTransaction = 304,
 
     # Attempt to send transaction without the necessary privileges
@@ -95,27 +120,67 @@ class ErrorCode(IntEnum):
     # Attempt to create pool ledger config with name used for another existing pool
     PoolLedgerConfigAlreadyExistsError = 306,
 
+    # Timeout for action
+    PoolLedgerTimeout = 307,
+
+    # Attempt to open Pool for witch Genesis Transactions are not compatible with set Protocol version.
+    # Call pool.indy_set_protocol_version to set correct Protocol version.
+    PoolIncompatibleProtocolVersion = 308,
+
+    # Item not found on ledger.
+    LedgerNotFound = 309,
+
     # Revocation registry is full and creation of new registry is necessary
     AnoncredsRevocationRegistryFullError = 400,
 
-    AnoncredsInvalidUserRevocIndex = 401,
+    AnoncredsInvalidUserRevocId = 401,
 
-    AnoncredsAccumulatorIsFull = 402,
-
-    AnoncredsNotIssuedError = 403,
-
-    # Attempt to generate master secret with dupplicated name
+    # Attempt to generate master secret with duplicated name
     AnoncredsMasterSecretDuplicateNameError = 404,
 
     AnoncredsProofRejected = 405,
 
-    # Signus errors
+    AnoncredsCredentialRevoked = 406,
+
+    # Attempt to create credential definition with duplicated did schema pair
+    AnoncredsCredDefAlreadyExistsError = 407,
+
+    # Crypto errors
     # Unknown format of DID entity keys
-    SignusUnknownCryptoError = 500
+    UnknownCryptoTypeError = 500,
+
+    # Attempt to create duplicate did
+    DidAlreadyExistsError = 600,
+
+    # Unknown payment method was given
+    PaymentUnknownMethodError = 700,
+
+    # No method were scraped from inputs/outputs or more than one were scraped
+    PaymentIncompatibleMethodsError = 701,
+
+    # Insufficient funds on inputs
+    PaymentInsufficientFundsError = 702,
+
+    # No such source on a ledger
+    PaymentSourceDoesNotExistError = 703,
+
+    # Operation is not supported for payment method
+    PaymentOperationNotSupportedError = 704,
+
+    # Extra funds on inputs
+    PaymentExtraFundsError = 705
 
 
 class IndyError(Exception):
-    # error_code: ErrorCode
+    # error_code: ErrorCode - libindy error code
+    # message: Optional[str] - human-readable error description
+    # indy_backtrace: Optional[str] - error backtrace.
+    #         Collecting of backtrace can be enabled by:
+    #             1) setting environment variable `RUST_BACKTRACE=1`
+    #             2) calling `set_runtime_config` function with `collect_backtrace: true`
 
-    def __init__(self, error_code: ErrorCode):
+    def __init__(self, error_code: ErrorCode, error_details: Optional[dict] = None):
         self.error_code = error_code
+        if error_details:
+            self.message = error_details.get('message')
+            self.indy_backtrace = error_details.get('backtrace')

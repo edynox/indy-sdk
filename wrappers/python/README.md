@@ -1,5 +1,3 @@
-<a href="https://sovrin.org/" target="_blank"><img src="https://avatars2.githubusercontent.com/u/22057628?v=3&s=50" align="right"></a>
-
 ## Indy SDK for Python
 
 This is a Python wrapper for [Indy](https://www.hyperledger.org/projects/indy). It is implemented using a foreign function interface (FFI) to a native library written in Rust. Indy is the
@@ -9,11 +7,18 @@ This Python wrapper currently requires python 3.6.
 
 Pull requests welcome!
 
+
+### How to install
+    pip install python3-indy
+    
+Note that before you can use python wrapper you must install c-callable SDK. 
+See the section "Installing the SDK" in the [Indy SDK documentation](../../README.md#installing-the-sdk) 
+ 
 ### How to build
 
 - Install native "indy" library:
-	* Ubuntu:  https://repo.evernym.com/libindy/ubuntu/
-	* Windows: https://repo.evernym.com/libindy/windows/
+	* Ubuntu:  https://repo.sovrin.org/lib/apt/xenial/
+	* Windows: https://repo.sovrin.org/windows/libindy/
 
 - Clone indy-sdk repo from https://github.com/hyperledger/indy-sdk
 
@@ -34,3 +39,7 @@ Then run
 
 ### Example use
 For the main workflow examples check tests in demo folder: https://github.com/hyperledger/indy-sdk/tree/master/wrappers/python/tests/demo
+
+#### Logging
+The Python wrapper uses default Python logging module. So, to enable logs you need just to configure its usual way. 
+Note: there is an additional log level=0 that is equal to Libindy `trace` level.

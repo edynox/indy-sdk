@@ -1,169 +1,129 @@
-extern crate serde_json;
-
-use errors::common::CommonError;
-use errors::indy::IndyError;
-
-use services::anoncreds::AnoncredsService;
-use services::pool::PoolService;
-use services::wallet::WalletService;
-use services::anoncreds::types::{
-    ClaimDefinition,
-    Schema,
-    ProofRequestJson,
-    ProofJson,
-    Predicate,
-    RevocationRegistry};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use utils::json::JsonDecodable;
+
+use domain::anoncreds::credential_definition::{cred_defs_map_to_cred_defs_v1_map, CredentialDefinition, CredentialDefinitionV1};
+use domain::anoncreds::proof::Proof;
+use domain::anoncreds::proof_request::ProofRequest;
+use domain::anoncreds::revocation_registry::{rev_regs_map_to_rev_regs_local_map, RevocationRegistry, RevocationRegistryV1};
+use domain::anoncreds::revocation_registry_definition::{rev_reg_defs_map_to_rev_reg_defs_v1_map, RevocationRegistryDefinition, RevocationRegistryDefinitionV1};
+use domain::anoncreds::schema::{Schema, schemas_map_to_schemas_v1_map, SchemaV1};
+use errors::prelude::*;
+use services::anoncreds::AnoncredsService;
 
 pub enum VerifierCommand {
     VerifyProof(
-        String, // proof request json
-        String, // proof json
-        String, // schemas json
-        String, // claim defs jsons
-        String, // revoc regs json
-        Box<Fn(Result<bool, IndyError>) + Send>)
+        ProofRequest, // proof request
+        Proof, // proof
+        HashMap<String, Schema>, // credential schemas
+        HashMap<String, CredentialDefinition>, // credential defs
+        HashMap<String, RevocationRegistryDefinition>, // rev reg defs
+        HashMap<String, HashMap<u64, RevocationRegistry>>, // rev reg entries
+        Box<Fn(IndyResult<bool>) + Send>)
 }
 
 pub struct VerifierCommandExecutor {
     anoncreds_service: Rc<AnoncredsService>,
-    pool_service: Rc<PoolService>,
-    wallet_service: Rc<WalletService>
 }
 
 impl VerifierCommandExecutor {
-    pub fn new(anoncreds_service: Rc<AnoncredsService>,
-               pool_service: Rc<PoolService>,
-               wallet_service: Rc<WalletService>) -> VerifierCommandExecutor {
+    pub fn new(anoncreds_service: Rc<AnoncredsService>) -> VerifierCommandExecutor {
         VerifierCommandExecutor {
-            anoncreds_service: anoncreds_service,
-            pool_service: pool_service,
-            wallet_service: wallet_service,
+            anoncreds_service,
         }
     }
 
     pub fn execute(&self, command: VerifierCommand) {
         match command {
-            VerifierCommand::VerifyProof(proof_request_json,
-                                         proof_json, schemas_json,
-                                         claim_defs_jsons, revoc_regs_json, cb) => {
+            VerifierCommand::VerifyProof(proof_request, proof, schemas, credential_defs, rev_reg_defs, rev_regs, cb) => {
                 info!(target: "verifier_command_executor", "VerifyProof command received");
-                self.verify_proof(&proof_request_json, &proof_json, &schemas_json,
-                                  &claim_defs_jsons, &revoc_regs_json, cb);
+                cb(self.verify_proof(proof_request, proof,
+                                     &schemas_map_to_schemas_v1_map(schemas),
+                                     &cred_defs_map_to_cred_defs_v1_map(credential_defs),
+                                     &rev_reg_defs_map_to_rev_reg_defs_v1_map(rev_reg_defs),
+                                     &rev_regs_map_to_rev_regs_local_map(rev_regs)));
             }
         };
     }
 
     fn verify_proof(&self,
-                    proof_request_json: &str,
-                    proof_json: &str,
-                    schemas_json: &str,
-                    claim_defs_jsons: &str,
-                    revoc_regs_json: &str,
-                    cb: Box<Fn(Result<bool, IndyError>) + Send>) {
-        let result = self._verify_proof(proof_request_json, proof_json, schemas_json, claim_defs_jsons, revoc_regs_json);
-        cb(result)
-    }
-
-    fn _verify_proof(&self,
-                     proof_request_json: &str,
-                     proof_json: &str,
-                     schemas_json: &str,
-                     claim_defs_jsons: &str,
-                     revoc_regs_json: &str) -> Result<bool, IndyError> {
-        let proof_req: ProofRequestJson = ProofRequestJson::from_json(proof_request_json)
-            .map_err(map_err_trace!())
-            .map_err(|err| CommonError::InvalidStructure(format!("Invalid proof_request_json: {}", err.to_string())))?;
-
-        let schemas: HashMap<String, Schema> = serde_json::from_str(schemas_json)
-            .map_err(map_err_trace!())
-            .map_err(|err| CommonError::InvalidStructure(format!("Invalid schemas_json: {}", err.to_string())))?;
-
-        let claim_defs: HashMap<String, ClaimDefinition> = serde_json::from_str(claim_defs_jsons)
-            .map_err(map_err_trace!())
-            .map_err(|err| CommonError::InvalidStructure(format!("Invalid claim_defs_jsons: {}", err.to_string())))?;
-
-        let revoc_regs: HashMap<String, RevocationRegistry> = serde_json::from_str(revoc_regs_json)
-            .map_err(map_err_trace!())
-            .map_err(|err| CommonError::InvalidStructure(format!("Invalid revoc_regs_json: {}", err.to_string())))?;
-
-        let proof_claims: ProofJson = ProofJson::from_json(&proof_json)
-            .map_err(map_err_trace!())
-            .map_err(|err| CommonError::InvalidStructure(format!("Invalid proof_json: {}", err.to_string())))?;
+                    proof_req: ProofRequest,
+                    proof: Proof,
+                    schemas: &HashMap<String, SchemaV1>,
+                    cred_defs: &HashMap<String, CredentialDefinitionV1>,
+                    rev_reg_defs: &HashMap<String, RevocationRegistryDefinitionV1>,
+                    rev_regs: &HashMap<String, HashMap<u64, RevocationRegistryV1>>) -> IndyResult<bool> {
+        debug!("verify_proof >>> proof_req: {:?}, proof: {:?}, schemas: {:?}, cred_defs: {:?},  \
+               rev_reg_defs: {:?}, rev_regs: {:?}",
+               proof_req, proof, schemas, cred_defs, rev_reg_defs, rev_regs);
 
         let requested_attrs: HashSet<String> =
-            proof_req.requested_attrs
+            proof_req.requested_attributes
                 .keys()
-                .map(|uuid| uuid.clone())
+                .cloned()
                 .into_iter()
                 .collect::<HashSet<String>>();
 
-        let requested_predicates: HashSet<Predicate> =
-            proof_req.requested_predicates
-                .values()
-                .map(|uuid| uuid.clone())
-                .into_iter()
-                .collect::<HashSet<Predicate>>();
-
         let received_revealed_attrs: HashSet<String> =
-            proof_claims.requested_proof.revealed_attrs
+            proof.requested_proof.revealed_attrs
                 .keys()
-                .map(|uuid| uuid.clone())
+                .cloned()
                 .into_iter()
                 .collect::<HashSet<String>>();
 
         let received_unrevealed_attrs: HashSet<String> =
-            proof_claims.requested_proof.unrevealed_attrs
+            proof.requested_proof.unrevealed_attrs
                 .keys()
-                .map(|uuid| uuid.clone())
+                .cloned()
+                .into_iter()
+                .collect::<HashSet<String>>();
+
+        let received_self_attested_attrs: HashSet<String> =
+            proof.requested_proof.self_attested_attrs
+                .keys()
+                .cloned()
                 .into_iter()
                 .collect::<HashSet<String>>();
 
         let received_attrs = received_revealed_attrs
             .union(&received_unrevealed_attrs)
-            .map(|attr| attr.clone())
+            .cloned()
+            .collect::<HashSet<String>>()
+            .union(&received_self_attested_attrs)
+            .cloned()
             .collect::<HashSet<String>>();
 
-        let received_predicates: HashSet<Predicate> =
-            proof_claims.proofs
-                .values()
-                .flat_map(|k| k.proof.primary_proof.ge_proofs.iter()
-                    .map(|p| p.predicate.clone()))
-                .into_iter()
-                .collect::<HashSet<Predicate>>();
-
         if requested_attrs != received_attrs {
-            return Err(IndyError::CommonError(CommonError::InvalidStructure(
-                format!("Requested attributes {:?} do not correspond to received {:?}", requested_attrs, received_attrs))));
+            return Err(err_msg(IndyErrorKind::InvalidStructure,
+                               format!("Requested attributes {:?} do not correspond to received {:?}", requested_attrs, received_attrs)));
         }
+
+        let requested_predicates: HashSet<String> =
+            proof_req.requested_predicates
+                .keys()
+                .cloned()
+                .into_iter()
+                .collect::<HashSet<String>>();
+
+        let received_predicates: HashSet<String> =
+            proof.requested_proof.predicates
+                .keys()
+                .cloned()
+                .into_iter()
+                .collect::<HashSet<String>>();
 
         if requested_predicates != received_predicates {
-            return Err(IndyError::CommonError(CommonError::InvalidStructure(
-                format!("Requested predicates {:?} do not correspond to received {:?}", requested_predicates, received_predicates))));
+            return Err(err_msg(IndyErrorKind::InvalidStructure,
+                               format!("Requested predicates {:?} do not correspond to received {:?}", requested_predicates, received_predicates)));
         }
 
-        let received_revealed_attrs_values: HashSet<(String, String)> =
-            proof_claims.requested_proof.revealed_attrs
-                .values()
-                .map(|&(ref uuid, _, ref encoded_value)| (uuid.clone(), encoded_value.clone()))
-                .collect::<HashSet<(String, String)>>();
+        let result = self.anoncreds_service.verifier.verify(&proof,
+                                                            &proof_req,
+                                                            schemas,
+                                                            cred_defs,
+                                                            rev_reg_defs,
+                                                            rev_regs)?;
 
-        let received_revealed_attrs_values_from_equal_proof: HashSet<(String, String)> = proof_claims.proofs.iter()
-            .flat_map(|(uuid, proof)|
-                proof.proof.primary_proof.eq_proof.revealed_attrs.values().map(move |encoded_value| (uuid.clone(), encoded_value.clone()))
-            )
-            .into_iter()
-            .collect::<HashSet<(String, String)>>();
-
-        if received_revealed_attrs_values != received_revealed_attrs_values_from_equal_proof { return Ok(false); }
-
-        let result = self.anoncreds_service.verifier.verify(&proof_claims,
-                                                            &proof_req.nonce,
-                                                            &claim_defs,
-                                                            &revoc_regs,
-                                                            &schemas)?;
+        debug!("verify_proof <<< result: {:?}", result);
 
         Ok(result)
     }

@@ -6,14 +6,9 @@ import org.hyperledger.indy.sdk.IndyException;
 import org.hyperledger.indy.sdk.IndyJava;
 import org.hyperledger.indy.sdk.LibIndy;
 import org.hyperledger.indy.sdk.ParamGuard;
-import org.hyperledger.indy.sdk.pool.Pool;
-import org.hyperledger.indy.sdk.signus.SignusResults.CreateAndStoreMyDidResult;
-import org.hyperledger.indy.sdk.signus.SignusResults.EncryptResult;
-import org.hyperledger.indy.sdk.signus.SignusResults.ReplaceKeysStartResult;
 import org.hyperledger.indy.sdk.wallet.Wallet;
 
 import com.sun.jna.Callback;
-import com.sun.jna.Pointer;
 
 /**
  * pairwise.rs API
@@ -41,7 +36,7 @@ public class Pairwise extends IndyJava.API {
 		public void callback(int xcommand_handle, int err, boolean exists) {
 
 			CompletableFuture<Boolean> future = (CompletableFuture<Boolean>) removeFuture(xcommand_handle);
-			if (! checkCallback(future, err)) return;
+			if (! checkResult(future, err)) return;
 
 			Boolean result = Boolean.valueOf(exists);
 			future.complete(result);
@@ -57,7 +52,7 @@ public class Pairwise extends IndyJava.API {
 		public void callback(int xcommand_handle, int err) {
 
 			CompletableFuture<Void> future = (CompletableFuture<Void>) removeFuture(xcommand_handle);
-			if (! checkCallback(future, err)) return;
+			if (! checkResult(future, err)) return;
 
 			Void result = null;
 			future.complete(result);
@@ -73,7 +68,7 @@ public class Pairwise extends IndyJava.API {
 		public void callback(int xcommand_handle, int err, String list_pairwise) {
 
 			CompletableFuture<String> future = (CompletableFuture<String>) removeFuture(xcommand_handle);
-			if (! checkCallback(future, err)) return;
+			if (! checkResult(future, err)) return;
 
 			String result = list_pairwise;
 			future.complete(result);
@@ -89,7 +84,7 @@ public class Pairwise extends IndyJava.API {
 		public void callback(int xcommand_handle, int err, String pairwise_info) {
 
 			CompletableFuture<String> future = (CompletableFuture<String>) removeFuture(xcommand_handle);
-			if (! checkCallback(future, err)) return;
+			if (! checkResult(future, err)) return;
 
 			String result = pairwise_info;
 			future.complete(result);
@@ -105,7 +100,7 @@ public class Pairwise extends IndyJava.API {
 		public void callback(int xcommand_handle, int err) {
 
 			CompletableFuture<Void> future = (CompletableFuture<Void>) removeFuture(xcommand_handle);
-			if (! checkCallback(future, err)) return;
+			if (! checkResult(future, err)) return;
 
 			Void result = null;
 			future.complete(result);
@@ -142,7 +137,7 @@ public class Pairwise extends IndyJava.API {
 				theirDid,
 				isPairwiseExistsCb);
 
-		checkResult(result);
+		checkResult(future, result);
 
 		return future;
 	}
@@ -180,7 +175,7 @@ public class Pairwise extends IndyJava.API {
 				metadata,
 				createPairwiseCb);
 
-		checkResult(result);
+		checkResult(future, result);
 
 		return future;
 	}
@@ -207,7 +202,7 @@ public class Pairwise extends IndyJava.API {
 				walletHandle,
 				listPairwiseCb);
 
-		checkResult(result);
+		checkResult(future, result);
 
 		return future;
 	}
@@ -238,7 +233,7 @@ public class Pairwise extends IndyJava.API {
 				theirDid,
 				getPairwiseCb);
 
-		checkResult(result);
+		checkResult(future, result);
 
 		return future;
 	}
@@ -259,8 +254,7 @@ public class Pairwise extends IndyJava.API {
 
 		ParamGuard.notNull(wallet, "wallet");
 		ParamGuard.notNullOrWhiteSpace(theirDid, "theirDid");
-		ParamGuard.notNullOrWhiteSpace(metadata, "metadata");		
-		
+
 		CompletableFuture<Void> future = new CompletableFuture<Void>();
 		int commandHandle = addFuture(future);
 
@@ -273,7 +267,7 @@ public class Pairwise extends IndyJava.API {
 				metadata,
 				setPairwiseMetadataCb);
 
-		checkResult(result);
+		checkResult(future, result);
 
 		return future;
 	}

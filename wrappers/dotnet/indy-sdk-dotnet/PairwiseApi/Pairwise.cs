@@ -1,10 +1,10 @@
 ﻿using Hyperledger.Indy.Utils;
 using Hyperledger.Indy.WalletApi;
-using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
-using static Hyperledger.Indy.IndyNativeMethods;
+using static Hyperledger.Indy.PairwiseApi.NativeMethods;
+#if __IOS__
+using ObjCRuntime;
+#endif
 
 namespace Hyperledger.Indy.PairwiseApi
 {
@@ -21,7 +21,10 @@ namespace Hyperledger.Indy.PairwiseApi
         /// <summary>
         /// Gets the callback to use when the IsExistsAsync command completes.
         /// </summary>
-        private static IsPairwiseExistsDelegate _isPairwiseExistsCallback = (xcommand_handle, err, exists) =>
+#if __IOS__
+        [MonoPInvokeCallback(typeof(IsPairwiseExistsCompletedDelegate))]
+#endif
+        private static void IsPairwiseExistsCallbackMethod(int xcommand_handle, int err, bool exists)
         {
             var taskCompletionSource = PendingCommands.Remove<bool>(xcommand_handle);
 
@@ -29,12 +32,16 @@ namespace Hyperledger.Indy.PairwiseApi
                 return;
 
             taskCompletionSource.SetResult(exists);
-        };
+        }
+        private static IsPairwiseExistsCompletedDelegate IsPairwiseExistsCallback = IsPairwiseExistsCallbackMethod;
 
         /// <summary>
         /// Gets the callback to use when the ListAsync command completes.
         /// </summary>
-        private static ListPairwiseDelegate _listPairwiseCallback = (xcommand_handle, err, list_pairwise) =>
+#if __IOS__
+        [MonoPInvokeCallback(typeof(ListPairwiseCompletedDelegate))]
+#endif
+        private static void ListPairwiseCallbackMethod(int xcommand_handle, int err, string list_pairwise)
         {
             var taskCompletionSource = PendingCommands.Remove<string>(xcommand_handle);
 
@@ -42,12 +49,16 @@ namespace Hyperledger.Indy.PairwiseApi
                 return;
 
             taskCompletionSource.SetResult(list_pairwise);
-        };
+        }
+        private static ListPairwiseCompletedDelegate ListPairwiseCallback = ListPairwiseCallbackMethod;
 
         /// <summary>
         /// Gets the callback to use when the GetAsync command completes.
         /// </summary>
-        private static GetPairwiseDelegate _getPairwiseCallback = (xcommand_handle, err, get_pairwise_json) =>
+#if __IOS__
+        [MonoPInvokeCallback(typeof(GetPairwiseCompletedDelegate))]
+#endif
+        private static void GetPairwiseCallbackMethod(int xcommand_handle, int err, string get_pairwise_json)
         {
             var taskCompletionSource = PendingCommands.Remove<string>(xcommand_handle);
 
@@ -55,7 +66,8 @@ namespace Hyperledger.Indy.PairwiseApi
                 return;
 
             taskCompletionSource.SetResult(get_pairwise_json);
-        };
+        }
+        private static GetPairwiseCompletedDelegate GetPairwiseCallback = GetPairwiseCallbackMethod;
 
         /// <summary>
         /// Gets whether or not a pairwise record exists in the provided wallet for the specified DID .
@@ -66,14 +78,17 @@ namespace Hyperledger.Indy.PairwiseApi
         /// DID, otherwise false.</returns>
         public static Task<bool> IsExistsAsync(Wallet wallet, string theirDid)
         {
+            ParamGuard.NotNull(wallet, "wallet");
+            ParamGuard.NotNullOrWhiteSpace(theirDid, "theirDid");
+
             var taskCompletionSource = new TaskCompletionSource<bool>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            int result = IndyNativeMethods.indy_is_pairwise_exists(
+            int result = NativeMethods.indy_is_pairwise_exists(
                 commandHandle,
                 wallet.Handle,
                 theirDid,
-                _isPairwiseExistsCallback);
+                IsPairwiseExistsCallback);
 
             CallbackHelper.CheckResult(result);
 
@@ -81,7 +96,7 @@ namespace Hyperledger.Indy.PairwiseApi
         }
 
         /// <summary>
-        /// Creates a new pairwise record in the provided wallet between two specified DIDs.
+        /// Creates a new pairwise record between two specified DIDs in the provided wallet.
         /// </summary>
         /// <param name="wallet">The wallet to store create the pairwise record in.</param>
         /// <param name="theirDid">The DID of the remote party.</param>
@@ -90,10 +105,14 @@ namespace Hyperledger.Indy.PairwiseApi
         /// <returns>An asynchronous <see cref="Task"/> completes once the operation completes.</returns>
         public static Task CreateAsync(Wallet wallet, string theirDid, string myDid, string metadata)
         {
+            ParamGuard.NotNull(wallet, "wallet");
+            ParamGuard.NotNullOrWhiteSpace(theirDid, "theirDid");
+            ParamGuard.NotNullOrWhiteSpace(myDid, "myDid");
+
             var taskCompletionSource = new TaskCompletionSource<bool>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            int result = IndyNativeMethods.indy_create_pairwise(
+            int result = NativeMethods.indy_create_pairwise(
                 commandHandle,
                 wallet.Handle,
                 theirDid,
@@ -109,9 +128,6 @@ namespace Hyperledger.Indy.PairwiseApi
         /// <summary>
         /// Lists all pairwise relationships stored in the specified wallet.
         /// </summary>
-        /// <param name="wallet">The wallet to get the pairwise records from.</param>
-        /// <returns>An asynchronous <see cref="Task{T}"/> that resolves to a JSON string containing
-        /// an array of all pairwise relationships stored in the wallet.</returns>
         /// <remarks>
         /// The JSON string that this method resolves to will contain a array of objects each of which
         /// describes a pairwise record for two DIDs, a DID belonging to the record owner (my_did) and the 
@@ -128,15 +144,20 @@ namespace Hyperledger.Indy.PairwiseApi
         /// Note that this call does not return any metadata associated with the pairwise records; to get the
         /// metadata use the <see cref="GetAsync(Wallet, string)"/> method.
         /// </remarks>
+        /// <param name="wallet">The wallet to get the pairwise records from.</param>
+        /// <returns>An asynchronous <see cref="Task{T}"/> that resolves to a JSON string containing
+        /// an array of all pairwise relationships stored in the wallet.</returns>
         public static Task<string> ListAsync(Wallet wallet)
         {
+            ParamGuard.NotNull(wallet, "wallet");
+
             var taskCompletionSource = new TaskCompletionSource<string>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            int result = IndyNativeMethods.indy_list_pairwise(
+            int result = NativeMethods.indy_list_pairwise(
                 commandHandle,
                 wallet.Handle,
-                _listPairwiseCallback);
+                ListPairwiseCallback);
 
             CallbackHelper.CheckResult(result);
 
@@ -146,10 +167,6 @@ namespace Hyperledger.Indy.PairwiseApi
         /// <summary>
         /// Gets the pairwise record associated with the specified DID from the provided wallet.
         /// </summary>
-        /// <param name="wallet">The wallet to get the pairwise record from.</param>
-        /// <param name="theirDid">The DID belonging to another party to get the pairwise record for.</param>
-        /// <returns>An asynchronous <see cref="Task{T}"/> that resolves to a JSON string containing
-        /// a pairwise record.</returns>
         /// <remarks>
         /// The JSON string that this method resolves to will contain a single pairwise record for two DIDs, 
         /// the DID belonging to the record owner (my_did), the associated DID belonging to the other party 
@@ -165,16 +182,23 @@ namespace Hyperledger.Indy.PairwiseApi
         /// 
         /// Note that if no metadata is present in a record the JSON will omit the <c>metadata</c>key.
         /// </remarks>
+        /// <param name="wallet">The wallet to get the pairwise record from.</param>
+        /// <param name="theirDid">The DID belonging to another party to get the pairwise record for.</param>
+        /// <returns>An asynchronous <see cref="Task{T}"/> that resolves to a JSON string containing
+        /// a pairwise record.</returns>
         public static Task<string> GetAsync(Wallet wallet, string theirDid)
         {
+            ParamGuard.NotNull(wallet, "wallet");
+            ParamGuard.NotNullOrWhiteSpace(theirDid, "theirDid");
+
             var taskCompletionSource = new TaskCompletionSource<string>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            int result = IndyNativeMethods.indy_get_pairwise(
+            int result = NativeMethods.indy_get_pairwise(
                 commandHandle,
                 wallet.Handle,
                 theirDid,
-                _getPairwiseCallback);
+                GetPairwiseCallback);
 
             CallbackHelper.CheckResult(result);
 
@@ -184,20 +208,24 @@ namespace Hyperledger.Indy.PairwiseApi
         /// <summary>
         /// Sets the metadata on the existing pairwise record for the specified DID in the provided wallet.
         /// </summary>
+        /// <remarks>
+        /// If the pairwise record already contains any existing metadata it will be replaced with the value provided 
+        /// in the <paramref name="metadata"/> parameter.  To remove all metadata for a record provide <c>null</c> in the
+        /// <paramref name="metadata"/> parameter.
+        /// </remarks>
         /// <param name="wallet">The wallet containing the pairwise record.</param>
         /// <param name="theirDid">The DID belonging to another party the pairwise record exists for.</param>
         /// <param name="metadata">The metadata to set on the pairwise record.</param>
-        /// <remarks>
-        /// If the pairwise record already contains any existing metadata it will be replaced with the value provided 
-        /// in the <c>metadata</c> parameter.  To remove all metadata for a record provide <c>null</c> in the
-        /// <c>metadata</c> parameter.</remarks>
         /// <returns>An asynchronous <see cref="Task"/> completes once the operation completes.</returns>
         public static Task SetMetadataAsync(Wallet wallet, string theirDid, string metadata)
         {
+            ParamGuard.NotNull(wallet, "wallet");
+            ParamGuard.NotNullOrWhiteSpace(theirDid, "theirDid");
+
             var taskCompletionSource = new TaskCompletionSource<bool>();
             var commandHandle = PendingCommands.Add(taskCompletionSource);
 
-            int result = IndyNativeMethods.indy_set_pairwise_metadata(
+            int result = NativeMethods.indy_set_pairwise_metadata(
                 commandHandle,
                 wallet.Handle,
                 theirDid,
