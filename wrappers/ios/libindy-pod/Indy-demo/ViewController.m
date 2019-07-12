@@ -3,7 +3,7 @@
 
 @implementation ViewController
 
-NSString *walletConfig = @"{\"id\":\"issuer_wallet\"}";
+NSString *walletConfig = @"{\"id\":\"wallet\"}";
 NSString *credentials = @"{\"key\":\"6nxtSiXFvBd593Y2DCed2dYvRY1PGK9WMtxCBjLzKgbw\", \"key_derivation_method\": \"RAW\"}";
 
 /* DEMO LOGIC */
@@ -18,7 +18,7 @@ NSString *credentials = @"{\"key\":\"6nxtSiXFvBd593Y2DCed2dYvRY1PGK9WMtxCBjLzKgb
         if ([error code]) {
           [self.StatusText insertText: [error localizedDescription]];
         } else {
-          [self.StatusText insertText: @"\nOK"];
+          [self.StatusText insertText: @"OK\n"];
         }
     }];
 }
@@ -31,7 +31,7 @@ NSString *credentials = @"{\"key\":\"6nxtSiXFvBd593Y2DCed2dYvRY1PGK9WMtxCBjLzKgb
         if ([error code]) {
           [self.StatusText insertText: [error localizedDescription]];
         } else {
-          [self.StatusText insertText: @"\nOK"];
+          [self.StatusText insertText: @"OK\n"];
           [self openWallet];
         }
     }];
@@ -44,7 +44,7 @@ NSString *credentials = @"{\"key\":\"6nxtSiXFvBd593Y2DCed2dYvRY1PGK9WMtxCBjLzKgb
     if ([error code]) {
       self.StatusText.text = [error localizedDescription];
     } else {
-      self.StatusText.text = @"OK";
+      self.StatusText.text = @"OK\n";
       [self createWallet];
     }
   }];
